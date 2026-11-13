@@ -1,6 +1,8 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "veil-messenger",
+  "name": "sms",
+  "workers_dev": true,
+  "preview_urls": true,
   "main": "./src/worker.js",
   "compatibility_date": "2026-11-13",
   "assets": {
