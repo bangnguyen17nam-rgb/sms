@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="vi" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0e1110" />
+    <meta name="description" content="Veil — không gian nhắn tin riêng tư, gọn gàng và nhanh." />
+    <title>Veil — Private Messenger</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <svg class="svg-sprite" aria-hidden="true">
+      <symbol id="i-message" viewBox="0 0 24 24"><path d="M21 12a8.4 8.4 0 0 1-9 8.4 9.3 9.3 0 0 1-3.8-.9L3 21l1.5-4.2A8.2 8.2 0 0 1 3 12a8.4 8.4 0 0 1 9-8.4A8.4 8.4 0 0 1 21 12Z"/><path d="M8 12h.01M12 12h.01M16 12h.01"/></symbol>
+      <symbol id="i-phone" viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 2 .7 2.9a2 2 0 0 1-.5 2.1L8 10a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.5c1 .4 1.9.6 2.9.7a2 2 0 0 1 1.7 2Z"/></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></symbol>
+      <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+      <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></symbol>
+      <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+      <symbol id="i-video" viewBox="0 0 24 24"><path d="m16 10 5-3v10l-5-3Z"/><rect x="3" y="5" width="13" height="14" rx="2"/></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
+      <symbol id="i-back" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></symbol>
+      <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 13h8M8 17h6"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></symbol>
+      <symbol id="i-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/></symbol>
+      <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></symbol>
+      <symbol id="i-send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+      <symbol id="i-wifi-off" viewBox="0 0 24 24"><path d="m2 2 20 20M8.5 8.5A10 10 0 0 1 20 10M5 10a10 10 0 0 1 1.2-.9M8.5 13.5A5 5 0 0 1 15 14M12 20h.01"/></symbol>
+      <symbol id="i-archive" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v12h14V8M10 12h4"/></symbol>
+      <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></symbol>
+    </svg>
+
+    <main class="auth-screen" id="authScreen">
+      <section class="auth-story" aria-label="Giới thiệu Veil">
+        <div class="auth-brand">
+          <span class="brand-mark auth-logo"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M7 8.5 20 4l13 4.5v9.1C33 26 27.7 32.3 20 36 12.3 32.3 7 26 7 17.6Z"/><path d="m13.5 14.5 6.5 12 6.5-12"/></svg></span>
+          <span>VEIL</span>
+        </div>
+        <div class="auth-story-copy">
+          <p class="eyebrow">Nhắn tin theo cách của bạn</p>
+          <h1>Một nơi yên tĩnh để<br />thật sự kết nối.</h1>
+          <p>Dữ liệu tài khoản, hội thoại và tin nhắn được lưu thật trên Cloudflare D1. Giao diện nhanh, riêng tư và không có feed gây xao nhãng.</p>
+        </div>
+        <div class="auth-proof"><svg><use href="#i-shield"/></svg><span><strong>Session an toàn</strong>Cookie HttpOnly · Secure · SameSite</span></div>
+      </section>
+
+      <section class="auth-panel" aria-labelledby="authTitle">
+        <div class="auth-card">
+          <div class="auth-mobile-brand"><span class="brand-mark auth-logo"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M7 8.5 20 4l13 4.5v9.1C33 26 27.7 32.3 20 36 12.3 32.3 7 26 7 17.6Z"/><path d="m13.5 14.5 6.5 12 6.5-12"/></svg></span><strong>VEIL</strong></div>
+          <div class="auth-heading"><p class="eyebrow">Chào mừng trở lại</p><h2 id="authTitle">Đăng nhập</h2><p id="authSubtitle">Tiếp tục những cuộc trò chuyện của bạn.</p></div>
+          <div class="auth-tabs" role="tablist" aria-label="Chọn đăng nhập hoặc đăng ký">
+            <button class="active" id="loginTab" role="tab" aria-selected="true">Đăng nhập</button>
+            <button id="registerTab" role="tab" aria-selected="false">Tạo tài khoản</button>
+          </div>
+          <div class="auth-error-summary" id="authErrorSummary" role="alert" tabindex="-1" hidden></div>
+
+          <form class="auth-form" id="loginForm" novalidate>
+            <label class="field"><span>Tên tài khoản</span><input id="loginUsername" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required minlength="5" placeholder="ví dụ: an_nguyen" /><small class="field-error" id="loginUsernameError"></small></label>
+            <label class="field"><span>Mật khẩu</span><span class="password-field"><input id="loginPassword" name="password" type="password" autocomplete="current-password" required minlength="5" placeholder="Nhập mật khẩu" /><button type="button" class="password-toggle" data-target="loginPassword" aria-label="Hiện mật khẩu">Hiện</button></span><small class="field-error" id="loginPasswordError"></small></label>
+            <button class="auth-submit" type="submit"><span>Đăng nhập</span><i class="button-loader" aria-hidden="true"></i></button>
+          </form>
+
+          <form class="auth-form" id="registerForm" novalidate hidden>
+            <label class="field"><span>Tên hiển thị</span><input id="registerDisplayName" name="displayName" autocomplete="name" required maxlength="50" placeholder="Tên mọi người sẽ thấy" /><small class="field-error" id="registerDisplayNameError"></small></label>
+            <label class="field"><span>Tên tài khoản</span><input id="registerUsername" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required minlength="5" maxlength="30" pattern="[a-z0-9_]+" placeholder="tối thiểu 5 ký tự" /><small>Dùng chữ thường, số và dấu gạch dưới.</small><small class="field-error" id="registerUsernameError"></small></label>
+            <label class="field"><span>Mật khẩu</span><span class="password-field"><input id="registerPassword" name="password" type="password" autocomplete="new-password" required minlength="5" maxlength="128" placeholder="Tối thiểu 5 ký tự" /><button type="button" class="password-toggle" data-target="registerPassword" aria-label="Hiện mật khẩu">Hiện</button></span><small class="field-error" id="registerPasswordError"></small></label>
+            <div class="recovery-warning"><svg><use href="#i-info"/></svg><span>Không yêu cầu email. Nếu mất mật khẩu, hiện chưa thể khôi phục tài khoản.</span></div>
+            <button class="auth-submit" type="submit"><span>Tạo tài khoản</span><i class="button-loader" aria-hidden="true"></i></button>
+          </form>
+          <p class="auth-legal">Bằng cách tiếp tục, bạn đồng ý chỉ sử dụng dịch vụ cho nội dung hợp pháp và tôn trọng quyền riêng tư của người khác.</p>
+        </div>
+      </section>
+    </main>
+
+    <div class="app-shell" id="appShell" hidden>
+      <aside class="nav-rail" aria-label="Điều hướng chính">
+        <button class="brand-mark" aria-label="Veil — Trang chính">
+          <svg viewBox="0 0 40 40" aria-hidden="true"><path d="M7 8.5 20 4l13 4.5v9.1C33 26 27.7 32.3 20 36 12.3 32.3 7 26 7 17.6Z"/><path d="m13.5 14.5 6.5 12 6.5-12"/></svg>
+        </button>
+        <div class="rail-main">
+          <button class="rail-btn active" data-section="inbox" aria-label="Hội thoại" aria-current="page"><svg><use href="#i-message"/></svg><span>Hội thoại</span><b id="unreadNavBadge" hidden>0</b></button>
+          <button class="rail-btn unavailable" disabled aria-label="Cuộc gọi — chưa hỗ trợ" title="Cuộc gọi chưa được hỗ trợ"><svg><use href="#i-phone"/></svg><span>Chưa hỗ trợ</span></button>
+          <button class="rail-btn" data-section="contacts" aria-label="Danh bạ"><svg><use href="#i-users"/></svg><span>Danh bạ</span></button>
+        </div>
+        <div class="rail-bottom">
+          <button class="rail-btn" id="themeToggle" aria-label="Chuyển giao diện sáng"><svg class="theme-icon"><use href="#i-sun"/></svg><span>Giao diện</span></button>
+          <button class="user-avatar avatar avatar-me" id="profileButton" aria-label="Mở hồ sơ của bạn">AN<span class="status-dot"></span></button>
+        </div>
+      </aside>
+
+      <section class="inbox-panel" id="inboxPanel" aria-label="Danh sách hội thoại">
+        <header class="inbox-header">
+          <div>
+            <p class="eyebrow">Không gian của bạn</p>
+            <h1 id="inboxTitle">Tin nhắn</h1>
+          </div>
+          <button class="icon-btn elevated" id="newChatButton" aria-label="Tạo cuộc trò chuyện mới"><svg><use href="#i-edit"/></svg></button>
+        </header>
+
+        <div class="search-wrap">
+          <svg><use href="#i-search"/></svg>
+          <input id="chatSearch" type="search" placeholder="Tìm người hoặc cuộc trò chuyện" aria-label="Tìm cuộc trò chuyện" autocomplete="off" />
+          <kbd>⌘ K</kbd>
+        </div>
+
+        <div class="filter-row" role="tablist" aria-label="Lọc hội thoại">
+          <button class="filter-chip active" role="tab" aria-selected="true" data-filter="all">Tất cả</button>
+          <button class="filter-chip" role="tab" aria-selected="false" data-filter="unread">Chưa đọc <span id="unreadFilterCount">0</span></button>
+          <button class="filter-chip" id="archiveChip" type="button"><svg><use href="#i-archive"/></svg>Lưu trữ <span id="archiveChipCount">0</span></button>
+        </div>
+
+        <div class="conversation-list" id="conversationList" role="listbox" aria-label="Các cuộc trò chuyện"></div>
+
+        <div class="inbox-footer">
+          <button id="archiveButton"><svg><use href="#i-archive"/></svg><span id="archiveButtonLabel">Đã lưu trữ</span><span id="archiveCount">0</span></button>
+          <div class="privacy-note"><svg><use href="#i-lock"/></svg><span>Đăng nhập bằng session bảo mật</span></div>
+        </div>
+      </section>
+
+      <main class="chat-panel" id="chatPanel" aria-label="Cuộc trò chuyện">
+        <div class="connection-banner" id="connectionBanner" role="status">
+          <svg><use href="#i-wifi-off"/></svg>
+          <span>Đang ngoại tuyến. Tin nhắn sẽ được gửi khi có mạng.</span>
+          <button id="reconnectButton">Kết nối lại</button>
+        </div>
+
+        <header class="chat-header">
+          <button class="icon-btn mobile-back" id="mobileBack" aria-label="Quay lại danh sách"><svg><use href="#i-back"/></svg></button>
+          <button class="chat-person" id="personButton" aria-label="Xem thông tin cuộc trò chuyện">
+            <span class="avatar avatar-linh">LK<span class="status-dot"></span></span>
+            <span class="person-copy">
+              <strong id="activeName">Linh Khánh</strong>
+              <small id="activeStatus"><i></i> Đang hoạt động</small>
+            </span>
+          </button>
+          <div class="chat-actions">
+            <button class="icon-btn unavailable" disabled aria-label="Gọi thoại — chưa hỗ trợ" title="Gọi thoại chưa được hỗ trợ"><svg><use href="#i-phone"/></svg></button>
+            <button class="icon-btn unavailable" disabled aria-label="Gọi video — chưa hỗ trợ" title="Gọi video chưa được hỗ trợ"><svg><use href="#i-video"/></svg></button>
+            <button class="icon-btn" id="infoButton" aria-label="Thông tin cuộc trò chuyện" aria-expanded="false"><svg><use href="#i-info"/></svg></button>
+          </div>
+        </header>
+
+        <div class="encryption-row"><span><svg><use href="#i-lock"/></svg>Kết nối HTTPS bảo mật</span><button id="securityInfo">Giới hạn</button></div>
+
+        <div class="messages" id="messages" aria-live="polite"><div class="chat-empty"><svg><use href="#i-message"/></svg><h2>Chọn một cuộc trò chuyện</h2><p>Tìm một người bằng username để bắt đầu nhắn tin.</p></div></div>
+
+        <div class="composer-wrap">
+          <div class="emoji-picker" id="emojiPicker" hidden aria-label="Chọn biểu tượng cảm xúc"></div>
+          <div class="attachment-preview" id="attachmentPreview" hidden>
+            <img id="attachmentPreviewImage" alt="Ảnh chuẩn bị gửi" hidden />
+            <span class="attachment-preview-icon" id="attachmentPreviewIcon"><svg><use href="#i-file"/></svg></span>
+            <span><strong id="attachmentPreviewName">Tệp đã chọn</strong><small id="attachmentPreviewMeta"></small></span>
+            <button class="icon-btn" id="removeAttachmentButton" type="button" aria-label="Bỏ tệp đã chọn"><svg><use href="#i-x"/></svg></button>
+          </div>
+          <form class="composer" id="composer">
+            <button class="icon-btn" id="attachButton" type="button" aria-label="Đính kèm tệp" title="Chọn tệp (tối đa 10 MB)"><svg><use href="#i-plus"/></svg></button>
+            <textarea id="messageInput" rows="1" placeholder="Nhắn cho Linh..." aria-label="Nội dung tin nhắn"></textarea>
+            <button class="icon-btn optional-action" id="attachImageButton" type="button" aria-label="Chọn ảnh" title="Chọn ảnh (tối đa 10 MB)"><svg><use href="#i-image"/></svg></button>
+            <button class="icon-btn optional-action" id="emojiButton" type="button" aria-label="Chọn biểu tượng cảm xúc" aria-expanded="false"><svg><use href="#i-smile"/></svg></button>
+            <button class="icon-btn optional-action unavailable" type="button" disabled aria-label="Ghi âm — chưa hỗ trợ" title="Tin nhắn thoại chưa được hỗ trợ"><svg><use href="#i-mic"/></svg></button>
+            <button class="send-btn" id="sendButton" type="submit" aria-label="Gửi tin nhắn"><svg><use href="#i-send"/></svg></button>
+          </form>
+          <input id="fileInput" type="file" hidden />
+          <input id="imageInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden />
+          <p class="composer-hint">Enter để gửi · Shift + Enter để xuống dòng · Tệp tối đa 10 MB</p>
+        </div>
+      </main>
+
+      <aside class="details-drawer" id="detailsDrawer" aria-label="Thông tin cuộc trò chuyện" aria-hidden="true">
+        <header><h2>Thông tin</h2><button class="icon-btn" id="closeDetails" aria-label="Đóng thông tin"><svg><use href="#i-x"/></svg></button></header>
+        <div class="details-profile">
+          <span class="avatar avatar-linh large">LK<span class="status-dot"></span></span>
+          <h3>Linh Khánh</h3><p>@linhkhanh</p>
+          <div class="profile-actions"><button class="unavailable" disabled title="Cuộc gọi chưa được hỗ trợ"><svg><use href="#i-phone"/></svg><span>Gọi</span></button><button id="messageSearchButton"><svg><use href="#i-search"/></svg><span>Tìm tin</span></button><button id="archiveConversationButton"><svg><use href="#i-archive"/></svg><span>Lưu trữ</span></button></div>
+        </div>
+        <div class="details-section">
+          <button class="detail-row" id="securityDetailsButton"><span class="detail-icon"><svg><use href="#i-shield"/></svg></span><span><strong>Bảo mật & dữ liệu</strong><small>HTTPS, session và giới hạn E2EE</small></span><svg class="chevron"><use href="#i-back"/></svg></button>
+          <button class="detail-row" id="muteButton"><span class="detail-icon"><svg><use href="#i-bell"/></svg></span><span><strong>Thông báo</strong><small id="muteLabel">Đang bật</small></span><svg class="chevron"><use href="#i-back"/></svg></button>
+        </div>
+        <div class="safety-card"><svg><use href="#i-lock"/></svg><div><strong>Dữ liệu thật trên Cloudflare D1</strong><p>Kết nối dùng HTTPS. E2EE đa thiết bị chưa được bật trong phiên bản này.</p></div></div>
+      </aside>
+
+      <nav class="mobile-nav" aria-label="Điều hướng di động">
+        <button class="active" data-section="inbox"><svg><use href="#i-message"/></svg><span>Tin nhắn</span><b id="mobileUnreadBadge" hidden>0</b></button>
+        <button class="unavailable" disabled title="Cuộc gọi chưa được hỗ trợ"><svg><use href="#i-phone"/></svg><span>Cuộc gọi</span></button>
+        <button data-section="contacts"><svg><use href="#i-users"/></svg><span>Danh bạ</span></button>
+        <button id="mobileProfile"><svg><use href="#i-user"/></svg><span>Cá nhân</span></button>
+      </nav>
+    </div>
+
+    <div class="modal-backdrop" id="newChatModal" aria-hidden="true">
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="newChatTitle">
+        <header><div><p class="eyebrow">Bắt đầu kết nối</p><h2 id="newChatTitle">Tin nhắn mới</h2></div><button class="icon-btn modal-close" aria-label="Đóng"><svg><use href="#i-x"/></svg></button></header>
+        <label class="modal-search"><span>Đến:</span><input id="userSearch" type="search" placeholder="Nhập @username" autocomplete="off" autocapitalize="none" spellcheck="false" /></label>
+        <div class="quick-people" id="userResults"><div class="search-empty"><svg><use href="#i-search"/></svg><p>Nhập ít nhất 2 ký tự để tìm tài khoản.</p></div></div>
+        <div class="request-note"><svg><use href="#i-shield"/></svg><span>Chỉ tài khoản đã đăng ký mới xuất hiện trong kết quả tìm kiếm.</span></div>
+      </section>
+    </div>
+
+    <div class="modal-backdrop" id="profileModal" aria-hidden="true">
+      <section class="modal profile-modal" role="dialog" aria-modal="true" aria-labelledby="profileTitle">
+        <header><div><p class="eyebrow">Tài khoản thiết bị này</p><h2 id="profileTitle">Hồ sơ của bạn</h2></div><button class="icon-btn modal-close" aria-label="Đóng"><svg><use href="#i-x"/></svg></button></header>
+        <div class="my-profile"><span class="avatar avatar-me xl" id="profileAvatar">--<span class="status-dot"></span></span><div><h3 id="profileName">Đang tải</h3><p id="profileUsername">@...</p></div><button class="subtle-btn" id="editProfileButton">Sửa tên</button></div>
+        <form class="profile-edit-form" id="profileEditForm" hidden><label for="profileDisplayNameInput">Tên hiển thị</label><div><input id="profileDisplayNameInput" maxlength="50" autocomplete="name" /><button type="submit">Lưu</button></div><small id="profileEditError"></small></form>
+        <button class="setting-card" id="modalThemeToggle"><span class="detail-icon"><svg><use href="#i-moon"/></svg></span><span><strong>Giao diện</strong><small id="themeLabel">Tối</small></span><span class="toggle on"><i></i></span></button>
+        <button class="setting-card unavailable" disabled><span class="detail-icon"><svg><use href="#i-shield"/></svg></span><span><strong>Quản lý nhiều thiết bị</strong><small>Chưa được hỗ trợ</small></span></button>
+        <div class="prototype-warning"><svg><use href="#i-info"/></svg><div><strong>Giới hạn bảo mật hiện tại</strong><p>Auth và dữ liệu đã chạy thật; nội dung tin nhắn chưa được mã hóa đầu cuối.</p></div></div>
+        <button class="logout-button" id="logoutButton"><svg><use href="#i-back"/></svg>Đăng xuất khỏi thiết bị này</button>
+      </section>
+    </div>
+
+    <div class="modal-backdrop" id="messageSearchModal" aria-hidden="true">
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="messageSearchTitle">
+        <header><div><p class="eyebrow">Trong hội thoại</p><h2 id="messageSearchTitle">Tìm tin nhắn</h2></div><button class="icon-btn modal-close" aria-label="Đóng"><svg><use href="#i-x"/></svg></button></header>
+        <label class="modal-search"><svg><use href="#i-search"/></svg><input id="messageSearchInput" type="search" placeholder="Nhập nội dung cần tìm" autocomplete="off" /></label>
+        <div class="message-search-results" id="messageSearchResults"><div class="search-empty"><p>Nhập từ khóa để tìm trong 50 tin gần nhất.</p></div></div>
+      </section>
+    </div>
+
+    <div class="modal-backdrop image-lightbox" id="imageLightboxModal" aria-hidden="true">
+      <section class="lightbox-panel" role="dialog" aria-modal="true" aria-label="Xem ảnh đính kèm">
+        <button class="icon-btn modal-close lightbox-close" aria-label="Đóng ảnh"><svg><use href="#i-x"/></svg></button>
+        <img id="imageLightbox" alt="Ảnh đính kèm" />
+      </section>
+    </div>
+
+    <div class="toast-region" id="toastRegion" aria-live="polite"></div>
+    <script src="./app.js"></script>
+  </body>
+</html>

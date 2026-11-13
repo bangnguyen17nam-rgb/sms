@@ -1,0 +1,16 @@
+{
+  "name": "veil-messenger",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "check": "wrangler deploy --dry-run",
+    "db:migrate:local": "wrangler d1 migrations apply veil-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply veil-db --remote",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
