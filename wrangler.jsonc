@@ -14,7 +14,7 @@
     {
       "binding": "DB",
       "database_name": "veil-db",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "88991546-d036-45cf-b2ef-5757fef2d684",
       "migrations_dir": "migrations"
     }
   ],
