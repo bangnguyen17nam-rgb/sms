@@ -11,6 +11,7 @@
     "test:syntax": "node --check src/worker.js && node --check public/app.js && node --check test/smoke.mjs && node --check test/browser.mjs",
     "db:migrate:local": "wrangler d1 migrations apply veil-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply veil-db --remote",
+    "db:migrate:preview": "wrangler d1 migrations apply veil-preview-db --remote --config wrangler.preview-migrations.jsonc",
     "deploy": "wrangler deploy"
   },
   "devDependencies": {

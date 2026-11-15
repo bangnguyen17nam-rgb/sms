@@ -35,6 +35,7 @@ Nếu tạo database mới, cập nhật `database_id` trong `wrangler.jsonc` b�
 
 ```bash
 npm run db:migrate:remote
+npm run db:migrate:preview
 ```
 
 Có thể kiểm tra và triển khai thủ công:
@@ -68,7 +69,7 @@ Không commit token Cloudflare, `.dev.vars`, `.env`, thư mục `node_modules` h
 5. Deploy command: `npx wrangler deploy`.
 6. Lưu và triển khai. Mỗi lần push nhánh production, Cloudflare sẽ tự build và deploy.
 
-D1 `veil-db` và R2 `veil-attachments` phải được tạo trước trong cùng tài khoản Cloudflare. Migration D1 cũng phải được chạy ít nhất một lần trước khi người dùng đăng ký.
+D1 `veil-db` và R2 `veil-attachments` phải được tạo trước trong cùng tài khoản Cloudflare. Preview dùng D1 `veil-preview-db` và R2 `veil-preview-attachments` riêng. Chạy `npm run db:migrate:preview` để cập nhật các bảng Preview, rồi `npx wrangler preview` để triển khai bản xem trước. Migration D1 phải được chạy ít nhất một lần trước khi người dùng đăng ký.
 
 ## Chạy local
 
