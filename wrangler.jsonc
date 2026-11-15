@@ -26,6 +26,26 @@
       "bucket_name": "veil-attachments"
     }
   ],
+  "previews": {
+    "d1_databases": [
+      {
+        "binding": "DB",
+        "database_name": "veil-db",
+        "database_id": "88991546-d036-45cf-b2ef-5757fef2d684"
+      },
+      {
+        "binding": "veil-db",
+        "database_name": "veil-db",
+        "database_id": "88991546-d036-45cf-b2ef-5757fef2d684"
+      }
+    ],
+    "r2_buckets": [
+      {
+        "binding": "ATTACHMENTS",
+        "bucket_name": "veil-attachments"
+      }
+    ]
+  },
   "observability": {
     "enabled": true
   }
