@@ -3,6 +3,9 @@ const SESSION_DAYS = 30;
 const PASSWORD_ITERATIONS = 100_000;
 const MAX_MESSAGE_LENGTH = 4_000;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_JSON_BYTES = 16 * 1024;
+const MAX_SEARCH_LENGTH = 100;
+const MAX_HISTORY_PAGE_SIZE = 100;
 const SAFE_INLINE_IMAGES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const encoder = new TextEncoder();
 
@@ -90,17 +93,70 @@ function publicUser(row) {
 }
 
 async function readJson(request) {
+  if (request.headers.get("content-type")?.split(";")[0].trim().toLowerCase() !== "application/json") {
+    throw new HttpError(415, "Yêu cầu phải gửi dữ liệu JSON.");
+  }
+  const declaredLength = Number(request.headers.get("content-length") || 0);
+  if (declaredLength > MAX_JSON_BYTES) throw new HttpError(413, "Dữ liệu gửi lên quá lớn.");
+  if (!request.body) throw new HttpError(400, "Dữ liệu gửi lên không hợp lệ.");
+
+  const reader = request.body.getReader();
+  const chunks = [];
+  let total = 0;
   try {
-    return await request.json();
-  } catch {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_JSON_BYTES) {
+        await reader.cancel();
+        throw new HttpError(413, "Dữ liệu gửi lên quá lớn.");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const buffer = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    buffer.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    const data = JSON.parse(new TextDecoder().decode(buffer));
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      throw new HttpError(400, "Dữ liệu gửi lên phải là một đối tượng JSON.");
+    }
+    return data;
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
     throw new HttpError(400, "Dữ liệu gửi lên không hợp lệ.");
   }
 }
 
+function inputString(value) {
+  return typeof value === "string" ? value : "";
+}
+
 function validateClientMessageId(value) {
-  const id = String(value || "");
+  const id = inputString(value);
   if (!/^[a-zA-Z0-9_-]{8,100}$/u.test(id)) throw new HttpError(400, "Mã tin nhắn không hợp lệ.");
   return id;
+}
+
+function parsePageLimit(url) {
+  const raw = url.searchParams.get("limit");
+  if (raw === null) return 50;
+  if (!/^[1-9][0-9]{0,2}$/u.test(raw)) throw new HttpError(400, "Giới hạn số tin nhắn không hợp lệ.");
+  const limit = Number(raw);
+  if (limit > MAX_HISTORY_PAGE_SIZE) throw new HttpError(400, "Tối đa 100 tin nhắn mỗi trang.");
+  return limit;
+}
+
+function requireBoolean(value, field) {
+  if (typeof value !== "boolean") throw new HttpError(400, `Trường ${field} phải là true hoặc false.`);
+  return value;
 }
 
 function cleanFileName(value) {
@@ -127,6 +183,20 @@ function assertSameOrigin(request) {
   if (["GET", "HEAD", "OPTIONS"].includes(request.method)) return;
   const origin = request.headers.get("origin");
   if (origin && origin !== new URL(request.url).origin) throw new HttpError(403, "Nguồn yêu cầu không hợp lệ.");
+  const fetchSite = request.headers.get("sec-fetch-site");
+  if (fetchSite === "cross-site" || fetchSite === "same-site") {
+    throw new HttpError(403, "Nguồn yêu cầu không hợp lệ.");
+  }
+  const referer = request.headers.get("referer");
+  if (!origin && referer) {
+    let refererOrigin;
+    try {
+      refererOrigin = new URL(referer).origin;
+    } catch {
+      throw new HttpError(403, "Nguồn yêu cầu không hợp lệ.");
+    }
+    if (refererOrigin !== new URL(request.url).origin) throw new HttpError(403, "Nguồn yêu cầu không hợp lệ.");
+  }
 }
 
 async function createSession(env, userId, request) {
@@ -141,7 +211,7 @@ async function createSession(env, userId, request) {
 
 async function requireUser(request, env) {
   const token = parseCookies(request)[SESSION_COOKIE];
-  if (!token) throw new HttpError(401, "Bạn cần đăng nhập.");
+  if (!token || !/^[a-zA-Z0-9_-]{43}$/u.test(token)) throw new HttpError(401, "Bạn cần đăng nhập.");
   const tokenHash = await sha256(token);
   const user = await env.DB.prepare(`
     SELECT u.id, u.username, u.display_name
@@ -177,14 +247,15 @@ const conversationSelect = `
       FROM messages unread
       WHERE unread.conversation_id = c.id
         AND unread.sender_id <> mine.user_id
-        AND unread.sent_at > COALESCE(mine.last_read_at, '')
+        AND unread.rowid > mine.last_read_message_rowid
     ) AS unread_count
   FROM conversations c
   JOIN conversation_members mine ON mine.conversation_id = c.id AND mine.user_id = ?
   JOIN conversation_members theirs ON theirs.conversation_id = c.id AND theirs.user_id <> mine.user_id
   JOIN users other ON other.id = theirs.user_id
   LEFT JOIN messages latest ON latest.id = (
-    SELECT recent.id FROM messages recent WHERE recent.conversation_id = c.id ORDER BY recent.sent_at DESC LIMIT 1
+    SELECT recent.id FROM messages recent WHERE recent.conversation_id = c.id
+    ORDER BY recent.sent_at DESC, recent.rowid DESC LIMIT 1
   )
   LEFT JOIN attachments latest_file ON latest_file.id = latest.attachment_id
 `;
@@ -207,11 +278,81 @@ async function getMessage(env, messageId) {
   `).bind(messageId).first();
 }
 
+async function findRepeatedMessage(env, conversationId, senderId, clientMessageId, body, attachment = null) {
+  const previous = await env.DB.prepare(`
+    SELECT m.id, m.conversation_id, m.body, m.attachment_id,
+      a.file_name, a.content_type, a.byte_size
+    FROM messages m
+    LEFT JOIN attachments a ON a.id = m.attachment_id
+    WHERE m.sender_id = ? AND m.client_message_id = ?
+  `).bind(senderId, clientMessageId).first();
+  if (!previous) return null;
+  if (
+    previous.conversation_id !== conversationId ||
+    previous.body !== (body || null) ||
+    Boolean(previous.attachment_id) !== Boolean(attachment) ||
+    (attachment && (
+      previous.file_name !== attachment.name ||
+      previous.content_type !== attachment.type ||
+      Number(previous.byte_size) !== attachment.size
+    ))
+  ) {
+    throw new HttpError(409, "Mã tin nhắn đã được dùng cho một nội dung khác.");
+  }
+  return getMessage(env, previous.id);
+}
+
+async function loadConversationMessages(url, env, conversationId, user, search = false) {
+  await ensureConversationMember(env, conversationId, user.id);
+  const limit = parsePageLimit(url);
+  const query = inputString(url.searchParams.get("q")).trim().toLowerCase();
+  if (search && query.length < 2) return json({ messages: [], hasMore: false, nextCursor: null });
+  if (query.length > MAX_SEARCH_LENGTH) throw new HttpError(400, "Từ khóa tìm kiếm quá dài.");
+
+  const before = url.searchParams.get("before");
+  let cursor = null;
+  if (before !== null) {
+    if (!/^[a-z0-9-]{36}$/iu.test(before)) throw new HttpError(400, "Con trỏ phân trang không hợp lệ.");
+    cursor = await env.DB.prepare("SELECT sent_at, rowid AS sequence FROM messages WHERE id = ? AND conversation_id = ?")
+      .bind(before, conversationId).first();
+    if (!cursor) throw new HttpError(400, "Con trỏ phân trang không hợp lệ.");
+  }
+
+  const parameters = [conversationId];
+  let where = "WHERE m.conversation_id = ?";
+  if (search) {
+    where += " AND (instr(lower(COALESCE(m.body, '')), ?) > 0 OR instr(lower(COALESCE(a.file_name, '')), ?) > 0)";
+    parameters.push(query, query);
+  }
+  if (cursor) {
+    where += " AND (m.sent_at < ? OR (m.sent_at = ? AND m.rowid < ?))";
+    parameters.push(cursor.sent_at, cursor.sent_at, cursor.sequence);
+  }
+  parameters.push(limit + 1);
+  const { results } = await env.DB.prepare(`
+    SELECT
+      m.id, m.conversation_id, m.sender_id, m.body, m.client_message_id, m.sent_at,
+      u.username, u.display_name,
+      a.id AS attachment_id, a.file_name AS attachment_name,
+      a.content_type AS attachment_type, a.byte_size AS attachment_bytes
+    FROM messages m
+    JOIN users u ON u.id = m.sender_id
+    LEFT JOIN attachments a ON a.id = m.attachment_id
+    ${where}
+    ORDER BY m.sent_at DESC, m.rowid DESC
+    LIMIT ?
+  `).bind(...parameters).all();
+  const hasMore = results.length > limit;
+  const page = results.slice(0, limit);
+  const nextCursor = hasMore ? page.at(-1).id : null;
+  return json({ messages: search ? page : page.reverse(), hasMore, nextCursor });
+}
+
 async function handleRegister(request, env) {
   const body = await readJson(request);
-  const username = String(body.username || "").trim().toLowerCase();
-  const password = String(body.password || "");
-  const displayName = String(body.displayName || "").trim();
+  const username = inputString(body.username).trim().toLowerCase();
+  const password = inputString(body.password);
+  const displayName = inputString(body.displayName).trim();
   const fields = {};
   if (!/^[a-z0-9_]{5,30}$/u.test(username)) fields.username = "Dùng 5–30 ký tự: chữ thường, số hoặc dấu gạch dưới.";
   if (password.length < 5 || password.length > 128) fields.password = "Mật khẩu cần từ 5 đến 128 ký tự.";
@@ -239,8 +380,11 @@ async function handleRegister(request, env) {
 
 async function handleLogin(request, env) {
   const body = await readJson(request);
-  const username = String(body.username || "").trim().toLowerCase();
-  const password = String(body.password || "");
+  const username = inputString(body.username).trim().toLowerCase();
+  const password = inputString(body.password);
+  if (!/^[a-z0-9_]{5,30}$/u.test(username) || password.length < 1 || password.length > 128) {
+    throw new HttpError(401, "Tên tài khoản hoặc mật khẩu không đúng.");
+  }
   const user = await env.DB.prepare(`
     SELECT id, username, display_name, password_salt, password_hash, password_iterations
     FROM users WHERE username = ?
@@ -260,22 +404,23 @@ async function handleLogout(request, env) {
 
 async function handleProfile(request, env, user) {
   const body = await readJson(request);
-  const displayName = String(body.displayName || "").trim();
+  const displayName = inputString(body.displayName).trim();
   if (!displayName || displayName.length > 50) throw new HttpError(400, "Tên hiển thị cần từ 1 đến 50 ký tự.");
   await env.DB.prepare("UPDATE users SET display_name = ? WHERE id = ?").bind(displayName, user.id).run();
   return json({ user: { id: user.id, username: user.username, displayName } });
 }
 
 async function handleUserSearch(url, env, user) {
-  const query = String(url.searchParams.get("q") || "").trim().toLowerCase().replace(/^@/u, "");
+  const query = inputString(url.searchParams.get("q")).trim().toLowerCase().replace(/^@/u, "");
   if (query.length < 2) return json({ users: [] });
+  if (query.length > MAX_SEARCH_LENGTH) throw new HttpError(400, "Từ khóa tìm kiếm quá dài.");
   const { results } = await env.DB.prepare(`
     SELECT id, username, display_name
     FROM users
-    WHERE id <> ? AND (username LIKE ? OR lower(display_name) LIKE ?)
+    WHERE id <> ? AND (instr(username, ?) > 0 OR instr(lower(display_name), ?) > 0)
     ORDER BY username
     LIMIT 12
-  `).bind(user.id, `%${query}%`, `%${query}%`).all();
+  `).bind(user.id, query, query).all();
   return json({ users: results.map((item) => publicUser(item)) });
 }
 
@@ -294,7 +439,7 @@ async function handleConversationList(url, env, user) {
 
 async function handleConversationCreate(request, env, user) {
   const body = await readJson(request);
-  const username = String(body.username || "").trim().toLowerCase().replace(/^@/u, "");
+  const username = inputString(body.username).trim().toLowerCase().replace(/^@/u, "");
   const other = await env.DB.prepare("SELECT id FROM users WHERE username = ?").bind(username).first();
   if (!other) throw new HttpError(404, "Không tìm thấy tài khoản này.");
   if (other.id === user.id) throw new HttpError(400, "Bạn không thể tự nhắn cho chính mình.");
@@ -321,45 +466,33 @@ async function handleConversationCreate(request, env, user) {
   return json({ conversation: item }, 201);
 }
 
-async function handleMessagesGet(env, conversationId, user) {
-  await ensureConversationMember(env, conversationId, user.id);
-  const { results } = await env.DB.prepare(`
-    SELECT
-      recent.id, recent.conversation_id, recent.sender_id, recent.body, recent.client_message_id, recent.sent_at,
-      u.username, u.display_name,
-      a.id AS attachment_id, a.file_name AS attachment_name,
-      a.content_type AS attachment_type, a.byte_size AS attachment_bytes
-    FROM (
-      SELECT * FROM messages WHERE conversation_id = ? ORDER BY sent_at DESC LIMIT 50
-    ) recent
-    JOIN users u ON u.id = recent.sender_id
-    LEFT JOIN attachments a ON a.id = recent.attachment_id
-    ORDER BY recent.sent_at ASC
-  `).bind(conversationId).all();
-  return json({ messages: results });
-}
-
 async function handleMessageCreate(request, env, conversationId, user) {
   await ensureConversationMember(env, conversationId, user.id);
   const input = await readJson(request);
-  const body = String(input.body || "").trim();
+  const body = inputString(input.body).trim();
   if (!body) throw new HttpError(400, "Tin nhắn không được để trống.");
   if (body.length > MAX_MESSAGE_LENGTH) throw new HttpError(400, `Tin nhắn tối đa ${MAX_MESSAGE_LENGTH} ký tự.`);
   const clientMessageId = validateClientMessageId(input.clientMessageId);
-  const existing = await env.DB.prepare("SELECT id FROM messages WHERE sender_id = ? AND client_message_id = ?")
-    .bind(user.id, clientMessageId).first();
-  if (existing) return json({ message: await getMessage(env, existing.id) });
+  const repeated = await findRepeatedMessage(env, conversationId, user.id, clientMessageId, body);
+  if (repeated) return json({ message: repeated });
 
   const id = crypto.randomUUID();
   const timestamp = nowIso();
-  await env.DB.batch([
-    env.DB.prepare(`
-      INSERT INTO messages (id, conversation_id, sender_id, body, client_message_id, sent_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).bind(id, conversationId, user.id, body, clientMessageId, timestamp),
-    env.DB.prepare("UPDATE conversations SET updated_at = ? WHERE id = ?").bind(timestamp, conversationId),
-    env.DB.prepare("UPDATE conversation_members SET archived_at = NULL WHERE conversation_id = ?").bind(conversationId)
-  ]);
+  try {
+    await env.DB.batch([
+      env.DB.prepare(`
+        INSERT INTO messages (id, conversation_id, sender_id, body, client_message_id, sent_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).bind(id, conversationId, user.id, body, clientMessageId, timestamp),
+      env.DB.prepare("UPDATE conversations SET updated_at = ? WHERE id = ?").bind(timestamp, conversationId),
+      env.DB.prepare("UPDATE conversation_members SET archived_at = NULL WHERE conversation_id = ?").bind(conversationId)
+    ]);
+  } catch (error) {
+    // A retry can race with the original request; the unique index decides the winner.
+    const winner = await findRepeatedMessage(env, conversationId, user.id, clientMessageId, body);
+    if (winner) return json({ message: winner });
+    throw error;
+  }
   return json({ message: await getMessage(env, id) }, 201);
 }
 
@@ -375,18 +508,18 @@ async function handleAttachmentCreate(request, env, conversationId, user) {
   if (!file || typeof file.stream !== "function") throw new HttpError(400, "Chưa chọn tệp cần gửi.");
   if (!file.size) throw new HttpError(400, "Không thể gửi tệp rỗng.");
   if (file.size > MAX_FILE_BYTES) throw new HttpError(413, "Tệp tối đa 10 MB.");
-  const body = String(form.get("body") || "").trim();
+  const body = inputString(form.get("body")).trim();
   if (body.length > MAX_MESSAGE_LENGTH) throw new HttpError(400, `Chú thích tối đa ${MAX_MESSAGE_LENGTH} ký tự.`);
   const clientMessageId = validateClientMessageId(form.get("clientMessageId"));
-  const existing = await env.DB.prepare("SELECT id FROM messages WHERE sender_id = ? AND client_message_id = ?")
-    .bind(user.id, clientMessageId).first();
-  if (existing) return json({ message: await getMessage(env, existing.id) });
-
   const attachmentId = crypto.randomUUID();
   const messageId = crypto.randomUUID();
   const timestamp = nowIso();
   const fileName = cleanFileName(file.name);
   const contentType = cleanContentType(file.type);
+  const repeated = await findRepeatedMessage(env, conversationId, user.id, clientMessageId, body, {
+    name: fileName, type: contentType, size: file.size
+  });
+  if (repeated) return json({ message: repeated });
   const objectKey = `${conversationId}/${timestamp.slice(0, 10)}/${attachmentId}`;
   await env.ATTACHMENTS.put(objectKey, file.stream(), {
     httpMetadata: { contentType },
@@ -407,6 +540,10 @@ async function handleAttachmentCreate(request, env, conversationId, user) {
     ]);
   } catch (error) {
     await env.ATTACHMENTS.delete(objectKey);
+    const winner = await findRepeatedMessage(env, conversationId, user.id, clientMessageId, body, {
+      name: fileName, type: contentType, size: file.size
+    });
+    if (winner) return json({ message: winner });
     throw error;
   }
   return json({ message: await getMessage(env, messageId) }, 201);
@@ -440,20 +577,26 @@ async function handleMemberSetting(request, env, conversationId, user, setting) 
   await ensureConversationMember(env, conversationId, user.id);
   const body = await readJson(request);
   if (setting === "archive") {
-    const archivedAt = body.archived ? nowIso() : null;
+    const archivedAt = requireBoolean(body.archived, "archived") ? nowIso() : null;
     await env.DB.prepare("UPDATE conversation_members SET archived_at = ? WHERE conversation_id = ? AND user_id = ?")
       .bind(archivedAt, conversationId, user.id).run();
   } else {
     await env.DB.prepare("UPDATE conversation_members SET muted = ? WHERE conversation_id = ? AND user_id = ?")
-      .bind(body.muted ? 1 : 0, conversationId, user.id).run();
+      .bind(requireBoolean(body.muted, "muted") ? 1 : 0, conversationId, user.id).run();
   }
   return json({ ok: true });
 }
 
 async function handleRead(env, conversationId, user) {
   await ensureConversationMember(env, conversationId, user.id);
-  await env.DB.prepare("UPDATE conversation_members SET last_read_at = ? WHERE conversation_id = ? AND user_id = ?")
-    .bind(nowIso(), conversationId, user.id).run();
+  await env.DB.prepare(`
+    UPDATE conversation_members
+    SET last_read_at = ?,
+        last_read_message_rowid = MAX(last_read_message_rowid, COALESCE((
+          SELECT MAX(rowid) FROM messages WHERE conversation_id = ?
+        ), 0))
+    WHERE conversation_id = ? AND user_id = ?
+  `).bind(nowIso(), conversationId, conversationId, user.id).run();
   return json({ ok: true });
 }
 
@@ -476,11 +619,16 @@ async function routeApi(request, env) {
   const attachmentMatch = path.match(/^\/api\/attachments\/([^/]+)$/u);
   if (attachmentMatch && request.method === "GET") return handleAttachmentGet(request, env, decodeURIComponent(attachmentMatch[1]), user);
 
+  const searchMatch = path.match(/^\/api\/conversations\/([^/]+)\/messages\/search$/u);
+  if (searchMatch && request.method === "GET") {
+    return loadConversationMessages(url, env, decodeURIComponent(searchMatch[1]), user, true);
+  }
+
   const conversationMatch = path.match(/^\/api\/conversations\/([^/]+)\/(messages|attachments|read|archive|mute)$/u);
   if (conversationMatch) {
     const conversationId = decodeURIComponent(conversationMatch[1]);
     const action = conversationMatch[2];
-    if (action === "messages" && request.method === "GET") return handleMessagesGet(env, conversationId, user);
+    if (action === "messages" && request.method === "GET") return loadConversationMessages(url, env, conversationId, user);
     if (action === "messages" && request.method === "POST") return handleMessageCreate(request, env, conversationId, user);
     if (action === "attachments" && request.method === "POST") return handleAttachmentCreate(request, env, conversationId, user);
     if (action === "read" && request.method === "POST") return handleRead(env, conversationId, user);

@@ -8,6 +8,11 @@ Repo này chạy toàn bộ ứng dụng trên một Cloudflare Worker:
 - Cloudflare R2: nội dung tệp đính kèm.
 - `migrations/`: cấu trúc D1 có thể áp dụng bằng Wrangler.
 
+Các luồng đã hỗ trợ: đăng ký, đăng nhập và đăng xuất; tìm tài khoản bằng username;
+tạo hội thoại trực tiếp; gửi và nhận tin nhắn văn bản/tệp; tìm kiếm tin nhắn trên D1;
+phân trang lịch sử; đánh dấu đã đọc; lưu trữ, bỏ lưu trữ, tắt thông báo cho từng
+hội thoại; cập nhật tên hiển thị; giao diện sáng/tối. Giao diện đồng bộ bằng polling.
+
 ## Chức năng gửi tệp
 
 - Nút `+`: chọn mọi loại tệp, tối đa 10 MB.
@@ -26,13 +31,7 @@ npx wrangler d1 create veil-db
 npx wrangler r2 bucket create veil-attachments
 ```
 
-Lệnh tạo D1 trả về một UUID. Mở `wrangler.jsonc` và thay:
-
-```text
-00000000-0000-0000-0000-000000000000
-```
-
-bằng UUID đó. Sau đó tạo bảng trên D1:
+Nếu tạo database mới, cập nhật `database_id` trong `wrangler.jsonc` bằng UUID do Cloudflare trả về. Repo hiện có ID D1 riêng, vì vậy chỉ thay khi chủ động dùng tài nguyên khác. Sau đó tạo bảng trên D1:
 
 ```bash
 npm run db:migrate:remote
@@ -64,7 +63,7 @@ Không commit token Cloudflare, `.dev.vars`, `.env`, thư mục `node_modules` h
 
 1. Mở Cloudflare Dashboard → **Workers & Pages** → **Create application**.
 2. Chọn **GitHub**, cấp quyền và chọn repo vừa đẩy lên.
-3. Đặt tên Worker là `veil-messenger`. Tên này phải trùng trường `name` trong `wrangler.jsonc`.
+3. Đặt tên Worker là `sms`, tương ứng với trường `name` trong `wrangler.jsonc`.
 4. Root directory: `/` nếu các file của repo nằm ngay ở thư mục gốc.
 5. Deploy command: `npx wrangler deploy`.
 6. Lưu và triển khai. Mỗi lần push nhánh production, Cloudflare sẽ tự build và deploy.
@@ -82,6 +81,11 @@ npm run dev
 ```
 
 Wrangler dùng D1/R2 local khi chạy `wrangler dev`. Dữ liệu local không được đẩy lên production.
+
+Để xác thực toàn bộ nghiệp vụ và giao diện trên máy phát triển, làm theo
+[`TESTING.md`](./TESTING.md). Trước khi deploy bản nâng cấp vào hệ thống có dữ liệu,
+sao lưu D1 rồi chạy `npm run db:migrate:remote` để áp dụng migration bổ sung
+cho trạng thái đã đọc.
 
 ## Ghi chú bảo mật
 

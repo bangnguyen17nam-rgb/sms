@@ -14,7 +14,14 @@ const state = {
   offline: !navigator.onLine,
   pendingAttachment: null,
   pendingAttachmentUrl: null,
-  uploadingAttachment: false
+  uploadingAttachment: false,
+  messageCursor: null,
+  hasMoreMessages: false,
+  historyExhausted: false,
+  loadingHistory: false,
+  messageRequestSequence: 0,
+  userSearchSequence: 0,
+  messageSearchSequence: 0
 };
 
 const appShell = $('#appShell');
@@ -171,6 +178,7 @@ async function submitAuth(event, mode) {
 async function enterApp() {
   authScreen.hidden = true;
   appShell.hidden = false;
+  conversationList.innerHTML = `<div class="conversation-empty" role="status">${icon('message')}<strong>Đang tải hội thoại</strong><p>Đang đồng bộ danh sách tin nhắn của bạn…</p></div>`;
   const name = state.user.displayName;
   const userInitials = initials(name);
   $('#profileName').textContent = name;
@@ -185,6 +193,9 @@ async function enterApp() {
 function leaveApp() {
   clearInterval(state.pollTimer);
   state.pollTimer = null;
+  state.messageRequestSequence += 1;
+  state.userSearchSequence += 1;
+  state.messageSearchSequence += 1;
   state.user = null;
   state.conversations = [];
   state.activeConversation = null;
@@ -219,6 +230,10 @@ async function loadConversations({ quiet = false } = {}) {
     renderConversations();
   } catch (error) {
     if (error.status === 401) return leaveApp();
+    if (!state.conversations.length) {
+      conversationList.innerHTML = `<div class="conversation-empty" role="alert">${icon('wifi-off')}<strong>Không tải được hội thoại</strong><p>${escapeHTML(error.message)}</p><button id="retryConversations" type="button">Thử tải lại</button></div>`;
+      $('#retryConversations')?.addEventListener('click', () => loadConversations());
+    }
     if (!quiet) toast(error.message, 'info');
   }
 }
@@ -270,6 +285,10 @@ async function selectConversation(id) {
   if (state.activeConversation?.id !== id) clearPendingAttachment();
   state.activeConversation = conversation;
   state.messages = [];
+  state.messageCursor = null;
+  state.hasMoreMessages = false;
+  state.historyExhausted = false;
+  state.messageRequestSequence += 1;
   $('#chatPanel').classList.remove('no-active-chat');
   renderConversations();
   updateConversationHeader();
@@ -311,19 +330,59 @@ async function loadMessages({ quiet = true, force = false } = {}) {
   if (!state.activeConversation) return;
   try {
     const activeId = state.activeConversation.id;
-    const data = await api(`/api/conversations/${encodeURIComponent(activeId)}/messages`);
-    if (state.activeConversation?.id !== activeId) return;
+    const sequence = ++state.messageRequestSequence;
+    const data = await api(`/api/conversations/${encodeURIComponent(activeId)}/messages?limit=50`);
+    if (state.activeConversation?.id !== activeId || sequence !== state.messageRequestSequence) return;
     const incoming = data.messages || [];
-    const changed = force || incoming.length !== state.messages.length || incoming.at(-1)?.id !== state.messages.at(-1)?.id;
+    // Preserve older pages and in-flight optimistic messages while polling.
+    const serverIds = new Set(incoming.map(item => item.id));
+    const serverClientIds = new Set(incoming.map(item => item.client_message_id));
+    const older = state.messages.filter(item => !item.id.startsWith('temp_') && !serverIds.has(item.id));
+    const pending = state.messages.filter(item => item.id.startsWith('temp_') && !serverClientIds.has(item.client_message_id));
+    const merged = [...older, ...incoming, ...pending].sort((a, b) => a.sent_at.localeCompare(b.sent_at));
+    const changed = force || merged.length !== state.messages.length || merged.some((item, index) => item.id !== state.messages[index]?.id);
+    if (!state.historyExhausted && !state.messageCursor) state.messageCursor = data.nextCursor || null;
+    state.hasMoreMessages = !state.historyExhausted && Boolean(state.messageCursor);
     if (changed) {
       const nearBottom = messages.scrollHeight - messages.scrollTop - messages.clientHeight < 100;
-      state.messages = incoming;
+      state.messages = merged;
       renderMessages();
       if (nearBottom || force) messages.scrollTop = messages.scrollHeight;
+    }
+    if (!document.hidden && incoming.some(item => item.sender_id !== state.user.id) && Number(state.activeConversation?.unread_count) > 0) {
+      await markConversationRead(state.activeConversation);
     }
   } catch (error) {
     if (error.status === 401) return leaveApp();
     if (!quiet) toast(error.message, 'info');
+  }
+}
+
+async function loadOlderMessages() {
+  if (!state.activeConversation || !state.messageCursor || state.loadingHistory) return;
+  const conversationId = state.activeConversation.id;
+  const cursor = state.messageCursor;
+  const button = $('#loadOlderMessages');
+  state.loadingHistory = true;
+  if (button) { button.disabled = true; button.textContent = 'Đang tải lịch sử…'; }
+  try {
+    const data = await api(`/api/conversations/${encodeURIComponent(conversationId)}/messages?before=${encodeURIComponent(cursor)}&limit=50`);
+    if (state.activeConversation?.id !== conversationId) return;
+    const oldHeight = messages.scrollHeight;
+    const oldTop = messages.scrollTop;
+    const known = new Set(state.messages.map(item => item.id));
+    state.messages = [...(data.messages || []).filter(item => !known.has(item.id)), ...state.messages];
+    state.messageCursor = data.nextCursor || null;
+    state.hasMoreMessages = Boolean(data.hasMore);
+    state.historyExhausted = !data.hasMore;
+    renderMessages();
+    messages.scrollTop = oldTop + messages.scrollHeight - oldHeight;
+  } catch (error) {
+    toast(error.message, 'info');
+  } finally {
+    state.loadingHistory = false;
+    const currentButton = $('#loadOlderMessages');
+    if (currentButton) currentButton.disabled = false;
   }
 }
 
@@ -332,7 +391,7 @@ function renderMessages() {
     messages.innerHTML = `<div class="chat-empty">${icon('message')}<h2>Bắt đầu cuộc trò chuyện</h2><p>Hãy gửi lời chào. Tin nhắn sẽ được lưu thật trên D1.</p></div>`;
     return;
   }
-  messages.innerHTML = `<div class="day-divider"><span>Gần đây</span></div>${state.messages.map((message) => {
+  messages.innerHTML = `${state.hasMoreMessages ? '<div class="history-tools"><button id="loadOlderMessages" type="button">Tải tin nhắn cũ hơn</button></div>' : ''}<div class="day-divider"><span>Gần đây</span></div>${state.messages.map((message) => {
     const outgoing = message.sender_id === state.user.id;
     const attachmentUrl = message.local_url || (message.attachment_id ? `/api/attachments/${encodeURIComponent(message.attachment_id)}` : '');
     const attachmentName = message.attachment_name || 'Tệp đính kèm';
@@ -346,29 +405,34 @@ function renderMessages() {
     const caption = message.body ? `<div class="message-bubble">${escapeHTML(message.body)}</div>` : '';
     return `<div class="message-row ${outgoing ? 'outgoing' : 'incoming'}" data-message-id="${escapeHTML(message.id)}">
       ${outgoing ? '' : `<span class="avatar mini ${avatarClass(message.username)}">${escapeHTML(initials(message.display_name || message.username))}</span>`}
-      <div class="message-stack">${attachment}${caption}<time>${escapeHTML(formatTime(message.sent_at))}${outgoing && !message.uploading ? `${icon('check')}${icon('check')}` : ''}</time></div>
+      <div class="message-stack">${attachment}${caption}<time>${escapeHTML(formatTime(message.sent_at))}${outgoing && !message.uploading ? icon('check') : ''}</time></div>
     </div>`;
   }).join('')}`;
 }
 
 async function sendMessage(text) {
   if (!state.activeConversation) return;
+  const conversationId = state.activeConversation.id;
   const clientMessageId = crypto.randomUUID();
   const optimistic = { id: `temp_${clientMessageId}`, client_message_id: clientMessageId, body: text, sent_at: new Date().toISOString(), sender_id: state.user.id };
   state.messages.push(optimistic);
   renderMessages();
   messages.scrollTop = messages.scrollHeight;
   try {
-    const data = await api(`/api/conversations/${encodeURIComponent(state.activeConversation.id)}/messages`, { method: 'POST', body: { body: text, clientMessageId } });
-    state.messages = state.messages.map((item) => item.id === optimistic.id ? data.message : item);
-    renderMessages();
+    const data = await api(`/api/conversations/${encodeURIComponent(conversationId)}/messages`, { method: 'POST', body: { body: text, clientMessageId } });
+    if (state.activeConversation?.id === conversationId) {
+      state.messages = state.messages.map((item) => item.id === optimistic.id ? data.message : item);
+      renderMessages();
+    }
     await loadConversations({ quiet: true });
   } catch (error) {
-    state.messages = state.messages.filter((item) => item.id !== optimistic.id);
-    renderMessages();
+    if (state.activeConversation?.id === conversationId) {
+      state.messages = state.messages.filter((item) => item.id !== optimistic.id);
+      renderMessages();
+      if (!messageInput.value.trim()) messageInput.value = text;
+      autoSizeInput();
+    }
     toast(error.message, 'info');
-    messageInput.value = text;
-    autoSizeInput();
   }
 }
 
@@ -399,8 +463,10 @@ async function sendAttachmentMessage(text) {
     }
     await loadConversations({ quiet: true });
   } catch (error) {
-    state.messages = state.messages.filter((item) => item.id !== optimistic.id);
-    renderMessages();
+    if (state.activeConversation?.id === conversationId) {
+      state.messages = state.messages.filter((item) => item.id !== optimistic.id);
+      renderMessages();
+    }
     toast(error.message, 'info');
   } finally {
     state.uploadingAttachment = false;
@@ -459,6 +525,7 @@ function setFilter(filter) {
 
 async function searchUsers(query) {
   const results = $('#userResults');
+  const sequence = ++state.userSearchSequence;
   if (query.length < 2) {
     results.innerHTML = `<div class="search-empty">${icon('search')}<p>Nhập ít nhất 2 ký tự để tìm tài khoản.</p></div>`;
     return;
@@ -466,8 +533,10 @@ async function searchUsers(query) {
   results.innerHTML = `<div class="search-empty"><p>Đang tìm...</p></div>`;
   try {
     const data = await api(`/api/users/search?q=${encodeURIComponent(query)}`);
+    if (sequence !== state.userSearchSequence || $('#userSearch').value.trim().replace(/^@/, '').toLowerCase() !== query) return;
     results.innerHTML = data.users.length ? `<p>Kết quả</p>${data.users.map((user) => `<button data-username="${escapeHTML(user.username)}"><span class="avatar ${avatarClass(user.username)}">${escapeHTML(initials(user.displayName))}</span><span><strong>${escapeHTML(user.displayName)}</strong><small>@${escapeHTML(user.username)}</small></span>${icon('message')}</button>`).join('')}` : `<div class="search-empty">${icon('search')}<p>Không tìm thấy @username phù hợp.</p></div>`;
   } catch (error) {
+    if (sequence !== state.userSearchSequence) return;
     results.innerHTML = `<div class="search-empty"><p>${escapeHTML(error.message)}</p></div>`;
   }
 }
@@ -489,6 +558,10 @@ async function createConversation(username) {
 function clearActiveConversation() {
   state.activeConversation = null;
   state.messages = [];
+  state.messageCursor = null;
+  state.hasMoreMessages = false;
+  state.historyExhausted = false;
+  state.messageRequestSequence += 1;
   messageInput.disabled = true;
   messageInput.value = '';
   clearPendingAttachment();
@@ -547,15 +620,48 @@ async function toggleMute() {
   }
 }
 
-function renderMessageSearch(query) {
+async function renderMessageSearch(query) {
   const results = $('#messageSearchResults');
+  const sequence = ++state.messageSearchSequence;
+  const conversationId = state.activeConversation?.id;
   const normalized = query.trim().toLocaleLowerCase('vi');
   if (!normalized) {
-    results.innerHTML = '<div class="search-empty"><p>Nhập từ khóa để tìm trong 50 tin gần nhất.</p></div>';
+    results.innerHTML = '<div class="search-empty"><p>Nhập từ khóa để tìm trong toàn bộ hội thoại.</p></div>';
     return;
   }
-  const found = state.messages.filter((message) => String(message.body || '').toLocaleLowerCase('vi').includes(normalized));
-  results.innerHTML = found.length ? found.map((message) => `<button class="message-search-result" data-message-id="${escapeHTML(message.id)}"><strong>${escapeHTML(message.body || message.attachment_name || 'Tệp đính kèm')}</strong><small>${message.sender_id === state.user.id ? 'Bạn' : escapeHTML(message.display_name || message.username)} · ${escapeHTML(formatTime(message.sent_at))}</small></button>`).join('') : '<div class="search-empty"><p>Không tìm thấy tin nhắn phù hợp.</p></div>';
+  if (normalized.length < 2) {
+    results.innerHTML = '<div class="search-empty"><p>Nhập ít nhất 2 ký tự để tìm.</p></div>';
+    return;
+  }
+  if (!conversationId) return;
+  results.innerHTML = '<div class="search-empty"><p>Đang tìm tin nhắn…</p></div>';
+  try {
+    const data = await api(`/api/conversations/${encodeURIComponent(conversationId)}/messages/search?q=${encodeURIComponent(normalized)}&limit=100`);
+    if (sequence !== state.messageSearchSequence || state.activeConversation?.id !== conversationId) return;
+    const found = data.messages || [];
+    results.innerHTML = found.length ? found.map((message) => `<button class="message-search-result" data-message-id="${escapeHTML(message.id)}"><strong>${escapeHTML(message.body || message.attachment_name || 'Tệp đính kèm')}</strong><small>${message.sender_id === state.user.id ? 'Bạn' : escapeHTML(message.display_name || message.username)} · ${escapeHTML(formatTime(message.sent_at))}</small></button>`).join('') + (data.hasMore ? '<p class="search-result-hint">Có thêm kết quả. Hãy nhập từ khóa cụ thể hơn.</p>' : '') : '<div class="search-empty"><p>Không tìm thấy tin nhắn phù hợp.</p></div>';
+  } catch (error) {
+    if (sequence !== state.messageSearchSequence) return;
+    results.innerHTML = `<div class="search-empty"><p>${escapeHTML(error.message)}</p></div>`;
+  }
+}
+
+async function jumpToMessage(id) {
+  if (!state.activeConversation) return;
+  const conversationId = state.activeConversation.id;
+  let row = messages.querySelector(`[data-message-id="${CSS.escape(id)}"]`);
+  let pages = 0;
+  while (!row && state.messageCursor && pages < 20 && state.activeConversation?.id === conversationId) {
+    const previousCursor = state.messageCursor;
+    await loadOlderMessages();
+    if (state.messageCursor === previousCursor) break;
+    row = messages.querySelector(`[data-message-id="${CSS.escape(id)}"]`);
+    pages++;
+  }
+  if (!row) return toast('Không thể mở tin nhắn này từ lịch sử hiện tại.', 'info');
+  row.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+  row.classList.add('search-highlight');
+  setTimeout(() => row.classList.remove('search-highlight'), 1800);
 }
 
 function insertEmoji(emoji) {
@@ -600,10 +706,10 @@ $$('.password-toggle').forEach((button) => button.addEventListener('click', () =
 
 conversationList.addEventListener('click', (event) => { const item = event.target.closest('.conversation-item'); if (item) selectConversation(item.dataset.id); });
 chatSearch.addEventListener('input', renderConversations);
-$$('.filter-chip').forEach((chip) => chip.addEventListener('click', () => setFilter(chip.dataset.filter)));
+$$('.filter-chip[data-filter]').forEach((chip) => chip.addEventListener('click', () => setFilter(chip.dataset.filter)));
 messageInput.disabled = true;
 messageInput.addEventListener('input', autoSizeInput);
-messageInput.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); composer.requestSubmit(); } });
+messageInput.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); composer.requestSubmit(); } });
 composer.addEventListener('submit', (event) => {
   event.preventDefault();
   const text = messageInput.value.trim();
@@ -620,6 +726,7 @@ fileInput.addEventListener('change', () => chooseAttachment(fileInput.files?.[0]
 imageInput.addEventListener('change', () => chooseAttachment(imageInput.files?.[0]));
 $('#removeAttachmentButton').addEventListener('click', clearPendingAttachment);
 messages.addEventListener('click', (event) => {
+  if (event.target.closest('#loadOlderMessages')) { loadOlderMessages(); return; }
   const button = event.target.closest('[data-image-src]');
   if (!button) return;
   $('#imageLightbox').src = button.dataset.imageSrc;
@@ -631,7 +738,19 @@ $('#userSearch').addEventListener('input', (event) => { clearTimeout(state.searc
 $('#userResults').addEventListener('click', (event) => { const button = event.target.closest('[data-username]'); if (button) createConversation(button.dataset.username); });
 $('#profileButton').addEventListener('click', () => openModal('#profileModal'));
 $('#mobileProfile').addEventListener('click', () => openModal('#profileModal'));
-$('#logoutButton').addEventListener('click', async () => { $('#logoutButton').disabled = true; try { await api('/api/auth/logout', { method: 'POST', body: {} }); } catch {} $('#logoutButton').disabled = false; leaveApp(); });
+$('#logoutButton').addEventListener('click', async () => {
+  const button = $('#logoutButton');
+  button.disabled = true;
+  try {
+    await api('/api/auth/logout', { method: 'POST', body: {} });
+    leaveApp();
+  } catch (error) {
+    if (error.status === 401) leaveApp();
+    else toast('Không thể đăng xuất khỏi máy chủ. Vui lòng thử lại.', 'info');
+  } finally {
+    button.disabled = false;
+  }
+});
 
 $$('.modal-close').forEach((button) => button.addEventListener('click', () => closeModal(button.closest('.modal-backdrop'))));
 $$('.modal-backdrop').forEach((backdrop) => backdrop.addEventListener('mousedown', (event) => { if (event.target === backdrop) closeModal(backdrop); }));
@@ -674,12 +793,10 @@ $('#messageSearchResults').addEventListener('click', (event) => {
   const result = event.target.closest('[data-message-id]');
   if (!result) return;
   closeModal($('#messageSearchModal'));
-  const row = messages.querySelector(`[data-message-id="${CSS.escape(result.dataset.messageId)}"]`);
-  if (row) {
-    row.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
-    row.classList.add('search-highlight');
-    setTimeout(() => row.classList.remove('search-highlight'), 1800);
-  }
+  appShell.classList.remove('details-open');
+  $('#infoButton').setAttribute('aria-expanded', 'false');
+  $('#detailsDrawer').setAttribute('aria-hidden', 'true');
+  jumpToMessage(result.dataset.messageId);
 });
 
 $('#editProfileButton').addEventListener('click', () => {
